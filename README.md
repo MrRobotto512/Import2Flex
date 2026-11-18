@@ -42,9 +42,10 @@ and `dist\Import2Flex-Setup-x.y.z.exe`.
 
 **Run from source:** double-click `run.bat`.
 
-**Making a release:** bump `__version__` in `import2flex/__init__.py`, commit, then push a
-matching tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`). GitHub Actions builds the
-installer and publishes it as a release.
+**Making a release:** bump `__version__` in `import2flex/__init__.py` and commit. Then either
+push a matching tag (`git tag v1.0.1` then `git push origin v1.0.1`), or on GitHub open
+*Actions → Build Windows installer → Run workflow* and enter the version (e.g. `1.0.1`).
+Either way GitHub Actions builds the installer and publishes it as a release with tag `v1.0.1`.
 
 ## First run
 
