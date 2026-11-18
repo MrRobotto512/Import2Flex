@@ -233,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
         import ctypes
         # Give the app its own taskbar identity/icon instead of python.exe's.
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"{APP_NAME}.{__version__}")
+        # Lets the installer/uninstaller detect that the app is running (AppMutex).
+        _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Import2FlexRunning")  # noqa: F841
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)

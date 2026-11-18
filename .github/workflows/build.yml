@@ -1,27 +1,85 @@
-name: Build Windows app
+name: Build Windows installer
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish releases on tags
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
+
       - name: Test
         run: python -m pytest -q
-      - name: Build exe
+
+      - name: Work out version
+        id: ver
+        shell: bash
+        run: |
+          app_version=$(python -c "import import2flex; print(import2flex.__version__)")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [[ "$version" != "$app_version" ]]; then
+              echo "::warning::Tag $GITHUB_REF_NAME does not match import2flex.__version__ ($app_version)"
+            fi
+          else
+            version="$app_version"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build app (PyInstaller)
         run: |
           python tools/make_icon.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name Import2Flex --icon build/icon.ico Import2Flex.pyw
+          pyinstaller --noconfirm --clean --windowed --name Import2Flex --icon build/icon.ico Import2Flex.pyw
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.ver.outputs.version }}" installer\Import2Flex.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Import2Flex-windows
-          path: dist/Import2Flex.exe
+          name: Import2Flex-Setup-${{ steps.ver.outputs.version }}
+          path: dist/Import2Flex-Setup-*.exe
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Install
+
+          1. Download **Import2Flex-Setup-*.exe** below and run it.
+             Windows SmartScreen may warn because the installer isn't code-signed: click **More info → Run anyway**.
+          2. Install [MakeMKV](https://www.makemkv.com/download/) if you haven't already (the installer offers a link if it's missing).
+          3. Optional: install the [HandBrake command-line version](https://handbrake.fr/downloads2.php) to shrink files.
+          4. Launch Import2Flex, choose your Plex Movies folder in **Settings**, click **Save**, and insert a DVD.
+
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/Import2Flex-Setup-*.exe \
+            --title "Import2Flex $GITHUB_REF_NAME" \
+            --notes-file notes.md --generate-notes

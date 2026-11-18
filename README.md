@@ -28,13 +28,23 @@ MakeMKV is free while in beta (enter the current beta key from the MakeMKV forum
 
 ## Install
 
-**Easiest:** download `Import2Flex.exe` from this repo's *Actions* tab (latest "Build Windows app"
-run → *Artifacts*), put it somewhere permanent such as `C:\Program Files\Import2Flex\`, and run it.
+1. Go to the repo's **Releases** page and download the latest **`Import2Flex-Setup-x.y.z.exe`**.
+2. Run it. Windows SmartScreen may warn because the installer isn't code-signed; click
+   **More info → Run anyway**. No admin rights are needed; you can choose "install for all users" if
+   you prefer.
+3. The installer adds a Start-menu shortcut, can start Import2Flex at sign-in, and offers a link to
+   MakeMKV if it isn't installed. Uninstall from *Settings → Apps* like any other program; your
+   settings in `%APPDATA%\Import2Flex` are kept.
 
-**Build it yourself:** install Python 3.11+ from python.org, then double-click `build.bat`.
-The finished program is `dist\Import2Flex.exe`.
+**Build it yourself:** install Python 3.11+ (and [Inno Setup 6](https://jrsoftware.org/isdl.php)
+for the installer), then double-click `build.bat`. You get `dist\Import2Flex\Import2Flex.exe`
+and `dist\Import2Flex-Setup-x.y.z.exe`.
 
 **Run from source:** double-click `run.bat`.
+
+**Making a release:** bump `__version__` in `import2flex/__init__.py`, commit, then push a
+matching tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`). GitHub Actions builds the
+installer and publishes it as a release.
 
 ## First run
 
