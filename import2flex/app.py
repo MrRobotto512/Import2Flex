@@ -183,7 +183,8 @@ class TrayApp(QObject):
             req.answer = answer
             req.done.set()
 
-        dlg = NameDialog(req.job.source, req.guess, req.timeout, done)
+        dlg = NameDialog(req.job.source, req.guess, req.timeout, done,
+                         doubt=req.job.name_doubt)
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()

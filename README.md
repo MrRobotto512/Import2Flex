@@ -66,7 +66,10 @@ the movie is in your library.
   continues. Edit it or let the countdown accept the guess.
 - **TMDb API key** (free at themoviedb.org → Settings → API) – turns a label like `MATRIX_WS`
   into the exact title and year, `The Matrix (1999)`, so Plex matches it reliably. Without it the
-  name comes from the disc label, which is usually close but has no year.
+  name comes from the disc label, which is usually close but has no year. A match is checked
+  against the disc's running time: when the label is too short to tell (a Forrest Gump disc
+  labelled `FOREST` finds *The Forest*) and the lengths are far apart, the name box pops up,
+  says why, and waits for you instead of counting down. The rip carries on meanwhile.
 - **Plex token** – makes Plex scan the new movie immediately instead of on its own schedule.
   [How to find your token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
 - **What to rip** – *Main movie only* (default) or *All titles*, which puts extras in an

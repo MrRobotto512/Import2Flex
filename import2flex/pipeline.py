@@ -56,6 +56,7 @@ class Job:
     detail: str = ""
     progress: float = 0.0
     name: str = ""                    # final "Title (Year)"
+    name_doubt: str = ""              # why the guessed name may be wrong
     dest: Path | None = None
     error: str = ""
     started: datetime = field(default_factory=datetime.now)
@@ -76,25 +77,39 @@ class Job:
 class EngineEvents(Protocol):
     def job_changed(self, job: Job) -> None: ...
     def notify(self, title: str, message: str, error: bool = False) -> None: ...
+    # timeout 0: wait for an answer (the guess is in doubt, see job.name_doubt)
     def ask_name(self, job: Job, guess: str, timeout: int) -> str | None: ...
     def drives_changed(self, state: dict[str, drives.Disc | None]) -> None: ...
 
 
-def guess_name(label: str, disc_name: str, cfg: Config) -> str:
-    """Best guess at ``Title (Year)`` from the disc label / MakeMKV disc name."""
-    candidates = [label, disc_name]
-    title = ""
-    for c in candidates:
+def guess_name(label: str, disc_name: str, cfg: Config,
+               disc_minutes: int = 0) -> tuple[str, str]:
+    """Best guess at ``Title (Year)`` from the disc label / MakeMKV disc name,
+    and why it may be wrong ("" when there is no reason to think so).
+
+    ``disc_minutes`` is the length of the main title: a TMDb match that runs
+    much longer or shorter is another movie (label ``FOREST`` on a Forrest
+    Gump disc finds The Forest).
+    """
+    titles = []
+    for c in (label, disc_name):
         if c and not naming.is_generic_label(c):
             title = naming.clean_label(c)
-            if title:
-                break
-    if not title:
-        return f"Unknown Disc {datetime.now():%Y-%m-%d %H%M}"
-    found = metadata.lookup_movie(title, cfg.tmdb_api_key) if cfg.tmdb_api_key else None
-    if found:
-        return naming.plex_name(*found)
-    return naming.plex_name(title)
+            if title and title not in titles:
+                titles.append(title)
+    if not titles:
+        return f"Unknown Disc {datetime.now():%Y-%m-%d %H%M}", ""
+    if not cfg.tmdb_api_key:
+        return naming.plex_name(titles[0]), ""
+    doubted = None
+    for title in titles:
+        found = metadata.lookup_movie(title, cfg.tmdb_api_key, disc_minutes)
+        if found and not found.doubt:
+            return naming.plex_name(found.title, found.year), ""
+        doubted = doubted or found
+    if doubted:
+        return naming.plex_name(doubted.title, doubted.year), doubted.doubt
+    return naming.plex_name(titles[0]), ""
 
 
 class Engine:
@@ -299,12 +314,16 @@ class Engine:
         info = mk.info(source, job.cancel)
         self._check_cancel(job)
 
-        guess = guess_name(job.label, info.name, cfg)
+        main = info.main_title()
+        guess, job.name_doubt = guess_name(job.label, info.name, cfg, main.duration // 60)
         job.name = guess
         self._changed(job)
+        if job.name_doubt:
+            log.warning("Job %d: not sure about the name %r: %s", job.id, guess, job.name_doubt)
+            self.events.notify("Check the movie name",
+                               f"{job.source}: is it {guess}? ({job.name_doubt})")
         job.name_future = self._start_name_prompt(job, guess)
 
-        main = info.main_title()
         if cfg.rip_mode == "all":
             title_arg: int | str = "all"
             needed = sum(t.size_bytes for t in info.titles)
@@ -333,14 +352,17 @@ class Engine:
             self.eject(job.drive)
 
     def _start_name_prompt(self, job: Job, guess: str) -> Future:
+        # Asked when the setting says so, and always when the guess is in
+        # doubt: then without the countdown that would accept it.
         fut: Future = Future()
-        if not self.cfg.confirm_name:
+        if not self.cfg.confirm_name and not job.name_doubt:
             fut.set_result(guess)
             return fut
+        timeout = 0 if job.name_doubt else self.cfg.confirm_timeout_sec
 
         def ask() -> None:
             try:
-                answer = self.events.ask_name(job, guess, self.cfg.confirm_timeout_sec)
+                answer = self.events.ask_name(job, guess, timeout)
             except Exception:
                 log.exception("Name prompt failed")
                 answer = None
@@ -382,7 +404,7 @@ class Engine:
                 encoded.append(dst)
             files = encoded
 
-        self._set(job, Status.MOVING, "Waiting for movie name…" if cfg.confirm_name else "", 1)
+        self._set(job, Status.MOVING, "Waiting for movie name…" if cfg.confirm_name or job.name_doubt else "", 1)
         try:
             name = job.name_future.result(timeout=3600) if job.name_future else job.name
         except Exception:

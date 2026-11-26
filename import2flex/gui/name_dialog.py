@@ -10,17 +10,23 @@ from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
 
 class NameDialog(QDialog):
     def __init__(self, source: str, guess: str, timeout: int,
-                 on_done: Callable[[str | None], None], parent=None):
+                 on_done: Callable[[str | None], None], parent=None, doubt: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Import2Flex - Name this movie")
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self._on_done = on_done
         self._answered = False
-        self._remaining = max(5, timeout)
+        # timeout 0: no countdown, the guess is in doubt and needs an answer
+        self._remaining = max(5, timeout) if timeout > 0 else 0
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"Ripping <b>{source}</b>. What should it be called in Plex?"))
+        if doubt:
+            warn = QLabel(f"<b>Not sure this is the right movie:</b> {doubt}.")
+            warn.setWordWrap(True)
+            warn.setStyleSheet("color: #c0392b")
+            layout.addWidget(warn)
         hint = QLabel("Use the form <i>Movie Title (Year)</i> for best Plex matching.")
         hint.setStyleSheet("color: gray")
         layout.addWidget(hint)
@@ -37,9 +43,12 @@ class NameDialog(QDialog):
         self.resize(460, self.sizeHint().height())
 
         self._timer = QTimer(self, interval=1000, timeout=self._tick)
-        self._timer.start()
-        self.edit.textEdited.connect(self._stop_countdown)
-        self._tick(first=True)
+        if self._remaining:
+            self._timer.start()
+            self.edit.textEdited.connect(self._stop_countdown)
+            self._tick(first=True)
+        else:
+            self.countdown.setText("The rip goes on meanwhile; the movie is filed once you answer.")
 
     def _stop_countdown(self) -> None:
         self._timer.stop()
